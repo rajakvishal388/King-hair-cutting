@@ -84,7 +84,7 @@
             
             <div class="grid md:grid-cols-2 gap-6">
                 <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-lg font-bold mb-4 text-gray-700 border-b pb-2">Select Staff & Service</h3>
+                    <h3 class="text-lg font-bold mb-4 text-gray-700 border-b pb-2">Select Staff, Slot & Service</h3>
                     <form onsubmit="handleBooking(event)" class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-600">Select Barber *</label>
@@ -93,6 +93,29 @@
                                 <option value="Santosh">Santosh</option>
                                 <option value="Basant">Basant</option>
                             </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600">Select Date *</label>
+                                <input type="date" id="booking-date" required class="w-full mt-1 p-2 border rounded bg-white outline-none focus:ring-2 focus:ring-yellow-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600">Select Time *</label>
+                                <select id="booking-time" required class="w-full mt-1 p-2 border rounded bg-white">
+                                    <option value="09:00 AM">09:00 AM</option>
+                                    <option value="10:00 AM">10:00 AM</option>
+                                    <option value="11:00 AM">11:00 AM</option>
+                                    <option value="12:00 PM">12:00 PM</option>
+                                    <option value="01:00 PM">01:00 PM</option>
+                                    <option value="02:00 PM">02:00 PM</option>
+                                    <option value="03:00 PM">03:00 PM</option>
+                                    <option value="04:00 PM">04:00 PM</option>
+                                    <option value="05:00 PM">05:00 PM</option>
+                                    <option value="06:00 PM">06:00 PM</option>
+                                    <option value="07:00 PM">07:00 PM</option>
+                                    <option value="08:00 PM">08:00 PM</option>
+                                </select>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-600">Select Service & Price *</label>
@@ -129,6 +152,7 @@
                         <tr class="bg-gray-100 text-sm text-gray-600 uppercase">
                             <th class="p-3 border-b">Customer Details</th>
                             <th class="p-3 border-b">Service Booking</th>
+                            <th class="p-3 border-b">Date & Time Slot</th>
                             <th class="p-3 border-b">Price</th>
                             <th class="p-3 border-b">Status</th>
                             <th class="p-3 border-b text-center">Admin action</th>
@@ -174,6 +198,12 @@
         const merchantUpi = "9523214334-2@ybl";
         const secretAdminId = "vishal9523";
         const secretAdminPass = "Vishal@95";
+
+        // Set Minimum Date as Today
+        window.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('booking-date').setAttribute('min', today);
+        });
 
         function showLoginTab(type) {
             document.getElementById('customer-auth-section').classList.add('hidden-section');
@@ -250,6 +280,8 @@
                 customerPhone: loggedInCustomer.phone,
                 barber: document.getElementById('booking-barber').value,
                 service: serviceData[0],
+                date: document.getElementById('booking-date').value,
+                time: document.getElementById('booking-time').value,
                 amount: serviceData[1],
                 status: 'Payment Reviewing'
             };
@@ -261,7 +293,6 @@
             const qrContainer = document.getElementById('qrcode');
             qrContainer.innerHTML = "";
             
-            // ACTUAL NPCI INTERACTION DEEP-LINK STRINGS (REAL TRANSACTION MODE)
             const upiString = `upi://pay?pa=${encodeURIComponent(merchantUpi)}&pn=${encodeURIComponent("King Salon")}&am=${amount}&cu=INR`;
             
             new QRCode(qrContainer, {
@@ -294,7 +325,7 @@
                 localStorage.setItem('king_salon_db_bookings', JSON.stringify(bookings));
                 renderData();
                 setTimeout(() => { 
-                    alert(`[SMS Dispatch System Routing]\nTo Customer Number: +91 ${bookings[index].customerPhone}\nMessage: Hello ${bookings[index].customerName}, Your booking for ${bookings[index].service} with Barber ${bookings[index].barber} is successfully CONFIRMED by King Salon Management.`); 
+                    alert(`[SMS Dispatch System Routing]\nTo Customer Number: +91 ${bookings[index].customerPhone}\nMessage: Hello ${bookings[index].customerName}, Your booking for ${bookings[index].service} with Barber ${bookings[index].barber} on Date: ${bookings[index].date} at Time: ${bookings[index].time} is successfully CONFIRMED by King Salon Management.`); 
                 }, 200);
             }
         }
@@ -306,17 +337,23 @@
                 historyList.innerHTML = userBookings.length === 0 ? `<p class="text-gray-400 italic">No historical records found for this profile.</p>` :
                 userBookings.map(b => `
                     <div class="p-3 bg-gray-50 border rounded flex justify-between items-center shadow-sm">
-                        <div><span class="font-mono text-[11px] block text-gray-400">${b.id}</span><strong class="text-gray-700">${b.service}</strong><br><span class="text-xs text-gray-500">Barber: ${b.barber}</span></div>
+                        <div>
+                            <span class="font-mono text-[11px] block text-gray-400">${b.id}</span>
+                            <strong class="text-gray-700">${b.service}</strong><br>
+                            <span class="text-xs text-gray-500">Barber: ${b.barber}</span><br>
+                            <span class="text-xs text-blue-600 font-semibold">Slot: ${b.date} (${b.time})</span>
+                        </div>
                         <div class="text-right"><div class="font-bold text-gray-900">\u20B9${b.amount}</div><span class="text-xs font-semibold px-2 py-0.5 rounded-full ${b.status.includes('Confirmed') ? 'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}">${b.status}</span></div>
                     </div>`).join('');
             }
 
             const adminTable = document.getElementById('admin-booking-table');
-            adminTable.innerHTML = bookings.length === 0 ? `<tr><td colspan="5" class="p-4 text-center text-gray-400 italic">No logs inside internal secure ledger.</td></tr>` :
+            adminTable.innerHTML = bookings.length === 0 ? `<tr><td colspan="6" class="p-4 text-center text-gray-400 italic">No logs inside internal secure ledger.</td></tr>` :
             bookings.map(b => `
                 <tr class="border-b hover:bg-gray-50">
                     <td class="p-3"><strong>${b.customerName}</strong><br><span class="text-xs text-gray-500">+91 ${b.customerPhone}</span></td>
                     <td class="p-3">${b.service}<br><span class="text-xs text-gray-400">Barber: ${b.barber} | Ticket: ${b.id}</span></td>
+                    <td class="p-3 font-medium text-blue-600">${b.date}<br><span class="text-xs text-gray-500">${b.time}</span></td>
                     <td class="p-3 font-bold text-gray-900">\u20B9${b.amount}</td>
                     <td class="p-3"><span class="text-xs font-semibold">${b.status}</span></td>
                     <td class="p-3 text-center">
