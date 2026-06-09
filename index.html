@@ -142,7 +142,6 @@
             <div class="flex justify-between items-center border-b pb-4">
                 <div>
                     <h3 class="text-xl font-bold text-red-600">👑 KING SALON - Management Board</h3>
-                    <p class="text-xs text-gray-400">Numbers are completely hidden from frontend layout users</p>
                 </div>
                 <button onclick="logout()" class="bg-gray-800 text-white text-xs px-3 py-1 rounded hover:bg-gray-700 cursor-pointer">Exit Board</button>
             </div>
@@ -153,9 +152,9 @@
                             <th class="p-3 border-b">Customer Details</th>
                             <th class="p-3 border-b">Service Booking</th>
                             <th class="p-3 border-b">Date & Time Slot</th>
-                            <th class="p-3 border-b">Price</th>
+                            <th class="p-3 border-b">Payment Receipt</th>
                             <th class="p-3 border-b">Status</th>
-                            <th class="p-3 border-b text-center">Admin action</th>
+                            <th class="p-3 border-b text-center">Admin Action</th>
                         </tr>
                     </thead>
                     <tbody id="admin-booking-table" class="text-sm"></tbody>
@@ -163,21 +162,26 @@
             </div>
         </section>
 
-        <div id="payment-modal" class="hidden-section fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+        <div id="payment-modal" class="hidden-section fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div class="bg-white rounded-lg p-6 max-w-sm w-full text-center space-y-4 relative shadow-2xl">
-                <h3 class="text-lg font-bold text-gray-800">Scan QR via GPay / PhonePe / Paytm</h3>
-                <p class="text-xs text-gray-500">Scan to complete original transaction instantly</p>
+                <h3 class="text-lg font-bold text-gray-800">Scan QR & Upload Screenshot</h3>
+                
+                <div class="bg-red-50 text-red-600 font-bold p-2 rounded border border-red-200 text-sm flex justify-center items-center gap-1">
+                    ⏱️ Session Expires In: <span id="payment-timer" class="font-mono text-base font-black">05:00</span>
+                </div>
+
                 <div class="text-3xl font-black text-gray-900 my-1" id="modal-amount-display">₹0.00</div>
                 
                 <div class="flex justify-center my-2">
                     <div id="qrcode" class="p-2 border bg-white shadow-sm"></div>
                 </div>
 
-                <div class="text-[11px] text-gray-400 bg-gray-50 p-2 rounded">
-                    Direct NPCI Unified Protocol Active
+                <div class="bg-gray-50 p-3 rounded border border-dashed border-gray-300 text-left">
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Upload Payment Screenshot *</label>
+                    <input type="file" id="payment-screenshot-file" accept="image/*" class="text-xs w-full text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-yellow-50 file:text-yellow-700 hover:file:bg-yellow-100 cursor-pointer">
                 </div>
 
-                <button onclick="simulatePaymentSuccess()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow cursor-pointer">Confirm Payment Done</button>
+                <button onclick="submitReceiptAndBooking()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow cursor-pointer">Submit Screenshot & Secure Booking</button>
                 <button onclick="closePaymentModal()" class="text-xs text-gray-400 hover:text-gray-600 underline block mx-auto mt-1 cursor-pointer">Cancel Booking</button>
             </div>
         </div>
@@ -190,19 +194,48 @@
         let isManagementLoggedIn = false;
         let currentGeneratedOtp = "";
         let activeTempBooking = null;
+        let countdownInterval = null;
+        let autoSyncInterval = null;
+        let uploadedScreenshotBase64 = "";
         
-        // Permanent Secure Browser Storage for Database 
         let bookings = JSON.parse(localStorage.getItem('king_salon_db_bookings')) || [];
 
-        // Secured Configurations (Requested Parameters)
         const merchantUpi = "9523214334-2@ybl";
         const secretAdminId = "vishal9523";
         const secretAdminPass = "Vishal@95";
 
-        // Set Minimum Date as Today
         window.addEventListener('DOMContentLoaded', () => {
             const today = new Date().toISOString().split('T')[0];
-            document.getElementById('booking-date').setAttribute('min', today);
+            const dateInput = document.getElementById('booking-date');
+            if(dateInput) dateInput.setAttribute('min', today);
+            
+            // Image Converter File System to catch raw data instantly
+            const fileInput = document.getElementById('payment-screenshot-file');
+            if(fileInput) {
+                fileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if(file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) { uploadedScreenshotBase64 = event.target.result; };
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+
+            // BACKEND AUTO-SYNC ENGINE
+            autoSyncInterval = setInterval(() => {
+                if(activeTempBooking && !isManagementLoggedIn) {
+                    let liveDB = JSON.parse(localStorage.getItem('king_salon_db_bookings')) || [];
+                    let checkMatch = liveDB.find(b => b.id === activeTempBooking.id);
+                    if(checkMatch && checkMatch.status.includes('Confirmed')) {
+                        clearInterval(countdownInterval);
+                        document.getElementById('payment-modal').classList.add('hidden-section');
+                        alert("🎉 Payment Confirmed! Your booking has been successfully approved by King Salon.");
+                        activeTempBooking = null;
+                        renderData();
+                    }
+                }
+            }, 2000);
         });
 
         function showLoginTab(type) {
@@ -273,6 +306,10 @@
 
         function handleBooking(event) {
             event.preventDefault();
+            uploadedScreenshotBase64 = ""; // Reset
+            const fileReset = document.getElementById('payment-screenshot-file');
+            if(fileReset) fileReset.value = "";
+
             const serviceData = document.getElementById('booking-service').value.split('|');
             activeTempBooking = {
                 id: 'TKT-' + Math.floor(10000 + Math.random() * 90000),
@@ -283,6 +320,7 @@
                 date: document.getElementById('booking-date').value,
                 time: document.getElementById('booking-time').value,
                 amount: serviceData[1],
+                screenshot: "",
                 status: 'Payment Reviewing'
             };
             openPaymentModal(serviceData[1]);
@@ -304,33 +342,74 @@
                 correctLevel : QRCode.CorrectLevel.M
             });
             document.getElementById('payment-modal').classList.remove('hidden-section');
+            startCountdownTimer(300); // 5 Minutes Launch
         }
 
-        function closePaymentModal() { document.getElementById('payment-modal').classList.add('hidden-section'); activeTempBooking = null; }
+        function startCountdownTimer(duration) {
+            clearInterval(countdownInterval);
+            let timer = duration, minutes, seconds;
+            const timerDisplay = document.getElementById('payment-timer');
+            
+            countdownInterval = setInterval(() => {
+                minutes = parseInt(timer / 60, 10);
+                seconds = parseInt(timer % 60, 10);
 
-        function simulatePaymentSuccess() {
-            if(!activeTempBooking) return;
+                minutes = minutes < 10 ? "0" + minutes : minutes;
+                seconds = seconds < 10 ? "0" + seconds : seconds;
+
+                timerDisplay.innerText = minutes + ":" + seconds;
+
+                if (--timer < 0) {
+                    clearInterval(countdownInterval);
+                    alert("❌ Payment Unsuccessful! 5 Minutes Time Window Expired.");
+                    closePaymentModal();
+                }
+            }, 1000);
+        }
+
+        function submitReceiptAndBooking() {
+            if(!uploadedScreenshotBase64) {
+                alert("Please upload your transaction payment screenshot before submitting!");
+                return;
+            }
+            clearInterval(countdownInterval);
+            activeTempBooking.screenshot = uploadedScreenshotBase64;
+            
             bookings.push(activeTempBooking);
             localStorage.setItem('king_salon_db_bookings', JSON.stringify(bookings));
+            
+            alert("✅ Screenshot Uploaded! Waiting for admin ledger match approval.");
             document.getElementById('payment-modal').classList.add('hidden-section');
-            alert(`Payment data locked! Request successfully sent to management queue.`);
-            activeTempBooking = null;
+            renderData();
+        }
+
+        function closePaymentModal() { 
+            clearInterval(countdownInterval);
+            document.getElementById('payment-modal').classList.add('hidden-section'); 
+            activeTempBooking = null; 
             renderData();
         }
 
         function confirmBookingByAdmin(id) {
-            const index = bookings.findIndex(b => b.id === id);
+            let currentDB = JSON.parse(localStorage.getItem('king_salon_db_bookings')) || [];
+            const index = currentDB.findIndex(b => b.id === id);
             if(index !== -1) {
-                bookings[index].status = 'Confirmed \u2713';
+                currentDB[index].status = 'Confirmed \u2713';
+                bookings = currentDB;
                 localStorage.setItem('king_salon_db_bookings', JSON.stringify(bookings));
                 renderData();
-                setTimeout(() => { 
-                    alert(`[SMS Dispatch System Routing]\nTo Customer Number: +91 ${bookings[index].customerPhone}\nMessage: Hello ${bookings[index].customerName}, Your booking for ${bookings[index].service} with Barber ${bookings[index].barber} on Date: ${bookings[index].date} at Time: ${bookings[index].time} is successfully CONFIRMED by King Salon Management.`); 
-                }, 200);
+                
+                const b = bookings[index];
+                const messageText = `Hello ${b.customerName},\n\nYour booking at *👑 KING SALON* has been successfully *CONFIRMED*!\n\n📋 *Booking Details:*\n• Ticket ID: ${b.id}\n• Service: ${b.service}\n• Barber: ${b.barber}\n• Date: ${b.date}\n• Time Slot: ${b.time}\n• Amount Paid: ₹${b.amount}\n\nThank you for choosing King Salon. See you soon!`;
+                
+                const whatsappUrl = `https://api.whatsapp.com/send?phone=91${b.customerPhone}&text=${encodeURIComponent(messageText)}`;
+                window.open(whatsappUrl, '_blank');
             }
         }
 
         function renderData() {
+            bookings = JSON.parse(localStorage.getItem('king_salon_db_bookings')) || [];
+            
             const historyList = document.getElementById('booking-history-list');
             if(loggedInCustomer) {
                 const userBookings = bookings.filter(b => b.customerPhone === loggedInCustomer.phone);
@@ -354,11 +433,13 @@
                     <td class="p-3"><strong>${b.customerName}</strong><br><span class="text-xs text-gray-500">+91 ${b.customerPhone}</span></td>
                     <td class="p-3">${b.service}<br><span class="text-xs text-gray-400">Barber: ${b.barber} | Ticket: ${b.id}</span></td>
                     <td class="p-3 font-medium text-blue-600">${b.date}<br><span class="text-xs text-gray-500">${b.time}</span></td>
-                    <td class="p-3 font-bold text-gray-900">\u20B9${b.amount}</td>
+                    <td class="p-3">
+                        ${b.screenshot ? `<a href="${b.screenshot}" target="_blank"><img src="${b.screenshot}" class="w-12 h-16 object-cover border rounded shadow-sm hover:scale-105 transition"></a>` : `<span class="text-red-500 italic text-xs">No File</span>`}
+                    </td>
                     <td class="p-3"><span class="text-xs font-semibold">${b.status}</span></td>
                     <td class="p-3 text-center">
-                        ${b.status.includes('Confirmed') ? `<span class="text-xs text-green-600 font-bold">\u2713 Slots Approved</span>` : 
-                        `<button onclick="confirmBookingByAdmin('${b.id}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded cursor-pointer shadow-sm">Approve & Send SMS</button>`}
+                        ${b.status.includes('Confirmed') ? `<span class="text-xs text-green-600 font-bold">\u2713 Approved</span>` : 
+                        `<button onclick="confirmBookingByAdmin('${b.id}')" class="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded cursor-pointer shadow-sm font-bold">Approve & WhatsApp</button>`}
                     </td>
                 </tr>`).join('');
         }
